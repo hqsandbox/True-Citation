@@ -1,0 +1,48 @@
+# True-Citation 配置文件
+# 复制此文件为 config.yaml 并填入你的API密钥
+
+# Semantic Scholar API (免费，但有速率限制，申请key可提高限制)
+# https://www.semanticscholar.org/product/api
+semantic_scholar:
+  api_key: ""  # 可选，无key也能用，但速率受限
+
+# CrossRef API (免费，建议填写邮箱以获得更好的速率限制)
+# https://www.crossref.org/documentation/retrieve-metadata/rest-api/
+crossref:
+  email: ""  # 建议填写，可获得"polite pool"更高速率
+
+# OpenAlex API (免费，无需key)
+# https://docs.openalex.org/
+openalex:
+  email: ""  # 可选，填写后速率更高
+
+# Google Scholar (通过 SerpAPI，需付费)
+# https://serpapi.com/
+serpapi:
+  api_key: ""  # 可选，用于Google Scholar搜索
+
+# DBLP (免费，无需配置)
+dblp:
+  enabled: true
+
+# 验证设置
+verification:
+  # 标题相似度阈值 (0-1)
+  title_similarity_threshold: 0.85
+  # 作者匹配最少需要匹配的数量
+  min_author_match: 1
+  # 年份允许的误差范围
+  year_tolerance: 1
+  # 并发请求数
+  max_concurrent_requests: 3
+  # 请求间隔(秒)
+  request_delay: 0.5
+
+# 输出设置
+output:
+  # 报告格式: json, markdown, html
+  report_format: markdown
+  # 是否生成修正后的bib文件
+  generate_corrected_bib: true
+  # 输出目录
+  output_dir: "./output"
