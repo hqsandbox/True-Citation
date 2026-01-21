@@ -32,7 +32,7 @@ verification:
   # 作者匹配最少需要匹配的数量
   min_author_match: 1
   # 年份允许的误差范围
-  year_tolerance: 1
+  year_tolerance: 0
   # 并发请求数
   max_concurrent_requests: 3
   # 请求间隔(秒)

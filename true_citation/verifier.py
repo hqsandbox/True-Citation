@@ -41,6 +41,8 @@ def get_author_last_name(name: str) -> str:
 
 def calculate_title_similarity(title1: str, title2: str) -> float:
     """计算标题相似度 (0-1)"""
+    if not title1 or not title2:
+        return 0.0
     t1 = normalize_title(title1)
     t2 = normalize_title(title2)
     
