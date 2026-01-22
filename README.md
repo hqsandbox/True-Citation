@@ -15,8 +15,8 @@
 
 ```bash
 # 克隆仓库
-git clone <repo-url>
-cd true-citation
+git clone https://github.com/hqsandbox/True-Citation
+cd True-Citation
 
 # 安装依赖
 pip install -r requirements.txt
@@ -27,7 +27,7 @@ cp config.example.yaml config.yaml
 
 ## 配置
 
-编辑 `config.yaml` 文件，填入你的 API 密钥：
+该部分可跳过（可以不用 API，但用了会更快）。如要配置，可编辑 `config.yaml` 文件，填入你的 API 密钥：
 
 ```yaml
 semantic_scholar:
@@ -36,8 +36,6 @@ semantic_scholar:
 crossref:
   email: "your-email@example.com"  # 建议填写
 ```
-
-大多数 API 都是免费的，无需密钥也可使用（但速率受限）。
 
 ## 使用方法
 
