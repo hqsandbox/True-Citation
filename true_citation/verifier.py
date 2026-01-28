@@ -49,12 +49,22 @@ def calculate_title_similarity(title1: str, title2: str) -> float:
     if not t1 or not t2:
         return 0.0
     
-    # 使用多种相似度算法取最高分
+    # 完全匹配
+    if t1 == t2:
+        return 1.0
+    
+    # 基础相似度算法
     ratio = fuzz.ratio(t1, t2) / 100.0
-    partial_ratio = fuzz.partial_ratio(t1, t2) / 100.0
     token_sort = fuzz.token_sort_ratio(t1, t2) / 100.0
     
-    return max(ratio, partial_ratio, token_sort)
+    # partial_ratio 容易对短标题过度匹配，需要根据长度差异调整
+    # 例如 "Context Engineering" vs "Context Engineering 2.0: ..." 不应该是100%
+    partial_ratio = fuzz.partial_ratio(t1, t2) / 100.0
+    len_ratio = min(len(t1), len(t2)) / max(len(t1), len(t2))
+    # 对 partial_ratio 进行惩罚：长度差异越大，惩罚越重
+    adjusted_partial = partial_ratio * (0.5 + 0.5 * len_ratio)
+    
+    return max(ratio, adjusted_partial, token_sort)
 
 
 def count_author_matches(authors1: list[str], authors2: list[str]) -> int:
