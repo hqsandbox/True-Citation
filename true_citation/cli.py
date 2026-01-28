@@ -187,10 +187,18 @@ def verify(
         TaskProgressColumn(),
         console=console,
     ) as progress:
-        task = progress.add_task("验证中...", total=len(entries_to_verify))
+        task1 = progress.add_task("第一遍验证...", total=len(entries_to_verify))
+        task2 = None  # 第二遍任务，稍后创建
         
-        def update_progress(completed: int, total: int):
-            progress.update(task, completed=completed)
+        def update_progress(completed: int, total: int, phase: int):
+            if phase == 1:
+                progress.update(task1, completed=completed)
+            else:
+                nonlocal task2
+                if task2 is None:
+                    progress.update(task1, completed=len(entries_to_verify))
+                    task2 = progress.add_task("第二遍重试...", total=total)
+                progress.update(task2, completed=completed)
         
         results = asyncio.run(
             verifier.verify_entries(entries_to_verify, progress_callback=update_progress)

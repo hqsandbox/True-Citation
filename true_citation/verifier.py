@@ -179,11 +179,10 @@ class Verifier:
         self.config = config
         self.search_manager = SearchManager(config)
     
-    async def verify_entry(self, entry: BibEntry) -> VerificationResult:
-        """验证单个引用条目"""
-        # 搜索
-        search_results = await self.search_manager.search_all(entry)
-        
+    def _evaluate_results(
+        self, entry: BibEntry, search_results: list[SearchResult]
+    ) -> VerificationResult:
+        """根据搜索结果评估并生成验证结果"""
         if not search_results:
             return VerificationResult(
                 entry=entry,
@@ -230,38 +229,82 @@ class Verifier:
             entry=entry,
             status=status,
             message=message,
-            search_results=scored_results[:5],  # 只保留前5个结果
+            search_results=scored_results[:5],
             best_match=best_match,
             corrected_entry=corrected_entry,
         )
+    
+    async def verify_entry(self, entry: BibEntry, with_retry: bool = False) -> VerificationResult:
+        """验证单个引用条目
+        
+        Args:
+            entry: 要验证的BibTeX条目
+            with_retry: 是否启用重试机制
+        """
+        if with_retry:
+            search_results = await self.search_manager.search_all_with_retry(entry)
+        else:
+            search_results = await self.search_manager.search_all(entry)
+        
+        return self._evaluate_results(entry, search_results)
     
     async def verify_entries(
         self, 
         entries: list[BibEntry],
         progress_callback=None
     ) -> list[VerificationResult]:
-        """验证多个引用条目
+        """验证多个引用条目（两遍验证：第一遍快速，第二遍对问题条目重试）
         
         Args:
             entries: 要验证的条目列表
-            progress_callback: 进度回调函数，签名为 (completed, total)
+            progress_callback: 进度回调函数，签名为 (completed, total, phase)
+                             phase: 1 = 第一遍验证, 2 = 第二遍重试
         """
-        results = []
         semaphore = asyncio.Semaphore(self.config.verification.max_concurrent_requests)
         
-        async def verify_with_semaphore(entry: BibEntry, index: int) -> VerificationResult:
+        # === 第一遍：快速验证（不带重试）===
+        async def verify_first_pass(entry: BibEntry, index: int) -> VerificationResult:
             async with semaphore:
-                result = await self.verify_entry(entry)
+                result = await self.verify_entry(entry, with_retry=False)
                 if progress_callback:
-                    progress_callback(index + 1, len(entries))
-                # 添加延迟避免请求过快
+                    progress_callback(index + 1, len(entries), 1)
                 await asyncio.sleep(self.config.verification.request_delay)
                 return result
         
-        tasks = [
-            verify_with_semaphore(entry, i) 
-            for i, entry in enumerate(entries)
+        tasks = [verify_first_pass(entry, i) for i, entry in enumerate(entries)]
+        first_pass_results = await asyncio.gather(*tasks)
+        
+        # 找出需要重试的条目（存疑或错误的）
+        results_dict = {r.entry.key: r for r in first_pass_results}
+        retry_entries = [
+            r.entry for r in first_pass_results
+            if r.status in (VerificationStatus.SUSPICIOUS, VerificationStatus.ERROR)
         ]
         
-        results = await asyncio.gather(*tasks)
-        return list(results)
+        if not retry_entries:
+            return list(first_pass_results)
+        
+        # === 第二遍：对问题条目重试（带重试机制）===
+        async def verify_second_pass(entry: BibEntry, index: int) -> VerificationResult:
+            async with semaphore:
+                result = await self.verify_entry(entry, with_retry=True)
+                if progress_callback:
+                    progress_callback(index + 1, len(retry_entries), 2)
+                await asyncio.sleep(self.config.verification.request_delay)
+                return result
+        
+        retry_tasks = [verify_second_pass(entry, i) for i, entry in enumerate(retry_entries)]
+        retry_results = await asyncio.gather(*retry_tasks)
+        
+        # 用重试结果更新（只有当重试结果更好时才替换）
+        for new_result in retry_results:
+            old_result = results_dict[new_result.entry.key]
+            # 如果新结果状态更好，或者状态相同但相似度更高，则替换
+            if (new_result.status.value < old_result.status.value or
+                (new_result.status == old_result.status and 
+                 new_result.best_match and old_result.best_match and
+                 new_result.best_match.title_similarity > old_result.best_match.title_similarity)):
+                results_dict[new_result.entry.key] = new_result
+        
+        # 按原始顺序返回结果
+        return [results_dict[entry.key] for entry in entries]

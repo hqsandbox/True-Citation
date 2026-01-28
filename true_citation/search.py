@@ -1,6 +1,7 @@
 """学术搜索API客户端"""
 
 import asyncio
+import logging
 import re
 from abc import ABC, abstractmethod
 from typing import Optional
@@ -10,6 +11,8 @@ import httpx
 
 from .config import Config
 from .models import BibEntry, SearchResult
+
+logger = logging.getLogger(__name__)
 
 
 class BaseSearchClient(ABC):
@@ -417,7 +420,7 @@ class SearchManager:
         ]
     
     async def search_all(self, entry: BibEntry) -> list[SearchResult]:
-        """在所有数据源中搜索
+        """在所有数据源中搜索（不带重试）
         
         Args:
             entry: 要搜索的BibTeX条目
@@ -429,8 +432,48 @@ class SearchManager:
         results_lists = await asyncio.gather(*tasks, return_exceptions=True)
         
         all_results = []
-        for results in results_lists:
+        for i, results in enumerate(results_lists):
             if isinstance(results, list):
                 all_results.extend(results)
+            elif isinstance(results, Exception):
+                logger.debug(f"{self.clients[i].source_name} 搜索失败: {results}")
+        
+        return all_results
+    
+    async def _search_with_retry(
+        self, client: BaseSearchClient, entry: BibEntry, max_retries: int = 2
+    ) -> list[SearchResult]:
+        """带重试的单个客户端搜索"""
+        last_exception = None
+        for attempt in range(max_retries + 1):
+            try:
+                return await client.search(entry)
+            except Exception as e:
+                last_exception = e
+                if attempt < max_retries:
+                    await asyncio.sleep(1.0 * (attempt + 1))
+                    logger.debug(
+                        f"{client.source_name} 搜索失败 (尝试 {attempt + 1}/{max_retries + 1}): {e}"
+                    )
+        
+        logger.warning(f"{client.source_name} 搜索最终失败: {last_exception}")
+        return []
+    
+    async def search_all_with_retry(self, entry: BibEntry, max_retries: int = 2) -> list[SearchResult]:
+        """在所有数据源中搜索（带重试）
+        
+        Args:
+            entry: 要搜索的BibTeX条目
+            max_retries: 每个数据源最大重试次数
+            
+        Returns:
+            所有数据源的搜索结果合并
+        """
+        tasks = [self._search_with_retry(client, entry, max_retries) for client in self.clients]
+        results_lists = await asyncio.gather(*tasks)
+        
+        all_results = []
+        for results in results_lists:
+            all_results.extend(results)
         
         return all_results
