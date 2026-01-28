@@ -158,9 +158,18 @@ def verify(
     
     # 过滤出需要验证的条目
     entries_to_verify = []
-    for key, entry in entries.items():
-        if key in used_keys:
-            entries_to_verify.append(entry)
+    missing_keys = []
+    for key in used_keys:
+        if key in entries:
+            entries_to_verify.append(entries[key])
+        else:
+            missing_keys.append(key)
+    
+    # 报告在TeX中引用但BibTeX中缺失的key
+    if missing_keys:
+        console.print(f"\n[yellow]⚠️  {len(missing_keys)} 条引用在BibTeX中未找到:[/yellow]")
+        for key in missing_keys:
+            console.print(f"   - [yellow]{key}[/yellow]")
     
     if not entries_to_verify:
         console.print("\n[yellow]⚠️  没有需要验证的引用[/yellow]")
